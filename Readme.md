@@ -1,5 +1,3 @@
-Here’s a version of the `README.md` tailored to your **Mongoose QueryBuilder**, styled like the **Knex version** but fully compatible with MongoDB and Mongoose practices:
-
 ````markdown
 # Mongoose Query Builder Utility
 
