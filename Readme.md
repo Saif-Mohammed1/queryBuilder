@@ -1,235 +1,247 @@
+Here’s a version of the `README.md` tailored to your **Mongoose QueryBuilder**, styled like the **Knex version** but fully compatible with MongoDB and Mongoose practices:
+
 ````markdown
-# Knex Query Builder Utility
+# Mongoose Query Builder Utility
 
-A powerful, configurable query builder for Knex.js that simplifies complex data fetching with pagination, filtering, sorting, and joins while enforcing DRY principles.
+A powerful, configurable query builder for Mongoose that simplifies complex MongoDB queries with support for pagination, filtering, sorting, text search, projection, and population — all through clean and reusable code.
 
-## Key Features
+## ✨ Key Features
 
-- **Automatic pagination** with metadata and HATEOAS links
-- **Flexible filtering** with operator support (`gt`, `lt`, `in`, etc.)
-- **Dynamic sorting** with field whitelisting
-- **Join handling** with automatic JSON aggregation
-- **Field selection** and projection control
-- **Full-text search** integration
-- **Aggregation support** for complex queries
-- **Date formatting** for specific fields
-- **Security** through input sanitization and allowed field checks
+- ✅ Automatic pagination with meta info and HATEOAS-style links
+- ✅ Flexible filtering with MongoDB operator support (`gt`, `lt`, `in`, etc.)
+- ✅ Dynamic sorting with field whitelisting
+- ✅ Text search (`$text` or regex fallback)
+- ✅ Population support for relational fields
+- ✅ Field projection and exclusion
+- ✅ Field/param aliasing and filter mapping
+- ✅ Fixed filters for multi-tenant or role-based data access
+- ✅ Secure and sanitized input handling
 
-## DRY Benefits
+---
 
-This utility eliminates repetitive query patterns by:
+## 💡 DRY Benefits
 
-1. Centralizing common data fetching logic
-2. Abstracting complex SQL operations (joins, aggregation)
-3. Standardizing response formats (pagination metadata, links)
-4. Reducing boilerplate for filtering/sorting
-5. Providing configuration-driven behavior
-6. Handling edge cases consistently across endpoints
+This utility removes repetitive Mongoose logic by:
 
-## Installation
+1. Centralizing pagination, filtering, and sorting logic
+2. Supporting flexible query params without boilerplate
+3. Enforcing field whitelisting and validation
+4. Standardizing API responses across endpoints
+5. Simplifying `populate()` and projection
+6. Handling edge cases like date parsing and operator merging
+
+---
+
+## 🚀 Installation
 
 ```bash
-npm install knex
-# No separate installation needed - include the class file
+# No separate package needed
+# Just include the QueryBuilder.ts class and types in your project
 ```
 ````
 
-## Usage
+---
 
-### Basic Setup
+## 🛠️ Usage
 
-```typescript
-import { QueryBuilder } from "./queryBuilder";
-import type { QueryBuilderConfig } from "./queryBuilder.types";
+### 🧱 Setup
+
+```ts
+import { QueryBuilder } from "./utils/queryBuilder";
+import type { QueryBuilderConfig } from "./types/queryBuilder.types";
 
 const config: QueryBuilderConfig<Product> = {
   allowedFilters: ["name", "price", "category"],
-  allowedSorts: ["created_at", "price"],
-  maxLimit: 50,
+  allowedSorts: ["createdAt", "price"],
+  defaultSort: "-createdAt",
   searchFields: ["name", "description"],
-  defaultSort: "-created_at",
-  selectFields: ["id", "name", "price"],
-  dateFormatFields: {
-    created_at: "YYYY-MM-DD HH24:MI",
+  maxLimit: 50,
+  filterMap: {
+    category: "categoryId",
   },
+  paramAliases: {
+    q: "search",
+  },
+  enableTextSearch: true,
 };
 
 const queryParams = new URLSearchParams(req.query);
-const builder = new QueryBuilder(knex, "products", queryParams, config);
-```
-
-### Join Handling
-
-```typescript
-builder
-  .join({
-    table: "product_images",
-    alias: "pi",
-    type: "left",
-    on: { left: "_id", right: "product_id" },
-    select: ["url", "alt_text"],
-    outerKey: "images", // Optional custom key
-  })
-  .join({
-    table: "inventory",
-    alias: "inv",
-    type: "inner",
-    on: { left: "sku", right: "product_sku" },
-    select: ["quantity"],
-  });
-```
-
-### Aggregation
-
-```typescript
-builder.aggregate(
-  [
-    `JSON_AGG(DISTINCT categories.name) AS categories`,
-    `SUM(inv.quantity) AS total_stock`,
-  ],
-  ["products.id"]
-);
-```
-
-### Execution
-
-```typescript
+const builder = new QueryBuilder(ProductModel, queryParams, config);
 const result = await builder.execute();
-
-// Returns:
-{
-  docs: [
-    {
-      id: 123,
-      name: 'Example',
-      images: [
-        { url: 'img1.jpg', alt_text: 'Main' },
-        { url: 'img2.jpg', alt_text: 'Back' }
-      ],
-      total_stock: 42
-    }
-  ],
-  meta: {
-    total: 100,
-    page: 1,
-    limit: 15,
-    totalPages: 7,
-    hasNext: true,
-    hasPrev: false
-  },
-  links: {
-    first: '?page=1&limit=15',
-    next: '?page=2&limit=15',
-    last: '?page=7&limit=15'
-  }
-}
 ```
 
-## Configuration Options
+---
 
-| Option                 | Type                               | Description                  | Default       |
-| ---------------------- | ---------------------------------- | ---------------------------- | ------------- |
-| `maxLimit`             | number                             | Max items per page           | 15            |
-| `enableFullTextSearch` | boolean                            | Enable full-text search      | false         |
-| `allowedFilters`       | (keyof T)[]                        | Whitelisted filter fields    | []            |
-| `allowedSorts`         | (keyof T)[]                        | Allowed sort fields          | []            |
-| `defaultSort`          | string                             | Default sort field           | "-created_at" |
-| `searchFields`         | string[]                           | Fields for text search       | []            |
-| `selectFields`         | string[]                           | Default selected fields      | []            |
-| `dateFormatFields`     | Record<string, string>             | Date formatting rules        | {}            |
-| `paramAliases`         | Record<string, string>             | Query param aliases          | {}            |
-| `filterMap`            | Record<string, string \| Knex.Raw> | Field name mappings          | {}            |
-| `fixedFilters`         | Partial<T>                         | Always-applied filters       | {}            |
-| `excludeLinksFields`   | string[]                           | Fields to exclude from links | []            |
-| `totalCountBy`         | string[]                           | Fields for count queries     | []            |
+## 🔎 Filtering and Operators
 
-## Advanced Features
-
-### Custom Operators
-
-Filter using operators in query params:
+You can filter using common MongoDB operators:
 
 ```http
-GET /products?price[gt]=100&category[in]=electronics,home
+GET /products?price[gte]=100&rating[lt]=4&category[in]=electronics,books
 ```
 
 Supported operators:
 
 - `gt`, `gte`, `lt`, `lte`
 - `ne` (not equal)
-- `in`, `nin` (not in)
-- `li` (LIKE), `ili` (ILIKE)
-- `con` (contains - for arrays/JSON)
+- `in`, `nin` (array inclusion)
+- `regex` (pattern matching)
 
-### Date Formatting
+---
 
-```typescript
-dateFormatFields: {
-  created_at: 'YYYY-MM-DD',
-  updated_at: 'MM/DD/YYYY HH24:MI'
-}
+## 📦 Population
+
+Populate referenced fields using:
+
+```ts
+builder.populate([
+  { path: "user", select: "name email" },
+  { path: "category", select: "title" },
+]);
 ```
 
-### Full-Text Search
+---
 
-Enable with:
+## 🧭 Pagination
 
-```typescript
-enableFullTextSearch: true,
-searchFields: ['title', 'description', 'tags']
-```
-
-Then search with:
+Supports pagination with metadata and navigation links:
 
 ```http
-GET /products?search=wireless+charging
+GET /products?page=2&limit=15
 ```
 
-### Custom Count Queries
+Returns:
 
-```typescript
-// For complex grouped queries
-totalCountBy: ["category", "brand"];
-```
-
-### Link Generation
-
-Automatic HATEOAS links with field exclusion:
-
-```typescript
-excludeLinksFields: ["api_key", "sensitive_param"];
-```
-
-## Error Handling
-
-Catches errors and throws `QueryBuilderError` with original exception:
-
-```typescript
-try {
-  await builder.execute();
-} catch (err) {
-  if (err instanceof QueryBuilderError) {
-    console.error("DB Error:", err.originalError);
+```json
+{
+  "docs": [...],
+  "meta": {
+    "total": 120,
+    "page": 2,
+    "limit": 15,
+    "totalPages": 8,
+    "hasNext": true,
+    "hasPrev": true
+  },
+  "links": {
+    "first": "?page=1&limit=15",
+    "prev": "?page=1&limit=15",
+    "next": "?page=3&limit=15",
+    "last": "?page=8&limit=15"
   }
 }
 ```
 
-## Best Practices
+---
 
-1. Always whitelist filter/sort fields
-2. Use `fixedFilters` for tenant isolation (`user_id`)
-3. Limit maximum items per page
-4. Use field mappings for legacy systems
-5. Prefer JSON aggregation for nested relations
-6. Format dates at database level for consistency
-7. Exclude sensitive params from pagination links
+## 🧰 Configuration Options
 
-## Limitations
+| Option             | Type                      | Description                                    | Default      |
+| ------------------ | ------------------------- | ---------------------------------------------- | ------------ |
+| `allowedFilters`   | `(keyof T)[]`             | Whitelisted query fields for filtering         | \[]          |
+| `allowedSorts`     | `(keyof T)[]`             | Allowed fields for sorting                     | \[]          |
+| `defaultSort`      | `string`                  | Default sort (supports `-` for DESC)           | "-createdAt" |
+| `maxLimit`         | `number`                  | Max items per page                             | 15           |
+| `searchFields`     | `(keyof T)[]`             | Fields to search via `regex` or `$text`        | \[]          |
+| `enableTextSearch` | `boolean`                 | Use MongoDB `$text` instead of regex           | false        |
+| `paramAliases`     | `Record<string, string>`  | Aliases for query params (e.g. `q` → `search`) | {}           |
+| `filterMap`        | `Record<string, keyof T>` | Map query keys to DB field names               | {}           |
+| `fixedFilters`     | `FilterQuery<T>`          | Filters that are always applied                | {}           |
+| `excludeFields`    | `(keyof T)[]`             | Fields to exclude from response                | \[]          |
 
-- PostgreSQL-specific features (JSON/Array functions)
-- Complex joins might require custom aggregation
-- Full-text search requires PostgreSQL configuration
+---
 
+## 🔍 Text Search
+
+Enable text search and define fields:
+
+```ts
+enableTextSearch: true,
+searchFields: ["title", "description"]
 ```
 
+Usage:
+
+```http
+GET /products?search=wireless+headphones
 ```
+
+Fallbacks to `regex` if `$text` is not enabled.
+
+---
+
+## 🛡️ Security Tips
+
+- Use `allowedFilters`, `allowedSorts`, and `excludeFields` to avoid exposing sensitive data.
+- Map query param aliases to avoid leaking internal database structures.
+- Use `fixedFilters` for multitenancy or user-scoped data access.
+
+---
+
+## ⚠️ Error Handling
+
+All errors are wrapped in a `QueryBuilderError`:
+
+```ts
+try {
+  await builder.execute();
+} catch (error) {
+  if (error instanceof QueryBuilderError) {
+    console.error("Query error:", error.originalError);
+  }
+}
+```
+
+---
+
+## 📌 Best Practices
+
+- ✅ Whitelist all filters and sorts explicitly
+- ✅ Limit `maxLimit` to protect performance
+- ✅ Use `populate()` for referencing related models
+- ✅ Use `fixedFilters` for authorization-based querying
+- ✅ Alias external query params like `q`, `from`, `to`
+- ✅ Standardize query responses across your API
+
+---
+
+## 🧪 Example Query
+
+```http
+GET /products?category[in]=electronics,books&price[gte]=50&search=charger&sort=-price&page=1&limit=10&fields=name,price
+```
+
+---
+
+## 📚 Result Format
+
+```ts
+interface QueryBuilderResult<T> {
+  docs: T[];
+  meta: {
+    total: number;
+    page: number;
+    limit: number;
+    totalPages: number;
+    hasNext: boolean;
+    hasPrev: boolean;
+  };
+  links?: {
+    first?: string;
+    prev?: string;
+    next?: string;
+    last?: string;
+  };
+}
+```
+
+---
+
+## 🧩 Extending
+
+You can easily extend this builder to:
+
+- Support custom operators
+- Add aggregations or group-by logic
+- Integrate caching or rate limiting
+- Include role-based access logic
