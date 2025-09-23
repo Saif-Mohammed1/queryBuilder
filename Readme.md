@@ -99,7 +99,148 @@ async def get_products(query_params=None):
 
 ---
 
-## 🔎 Filtering and Operators
+## 🚀 v2 AI Enhancements
+
+The v2 version includes significant AI-powered improvements for better performance, reliability, and developer experience:
+
+### ⚡ **Non-Blocking Async Execution**
+
+- **Problem Solved**: Original version used `ThreadPoolExecutor` which could create threading overhead
+- **v2 Solution**: Uses `asyncio.to_thread()` for cleaner async execution with Flask-SQLAlchemy sessions
+- **Benefit**: Better performance and resource management in async applications
+
+```python
+# v2 Enhanced async execution
+data, total = await asyncio.gather(
+    asyncio.to_thread(_data_with_ctx),
+    asyncio.to_thread(_count_with_ctx),
+)
+```
+
+### 🔧 **Improved Session Handling**
+
+- **Problem Solved**: Confusing session type detection and potential misuse of AsyncSession
+- **v2 Solution**: Clear separation between sync and async session paths with explicit error handling
+- **Benefit**: Prevents silent failures and guides developers toward correct implementation
+
+```python
+if self.is_async_session:
+    raise NotImplementedError(
+        "AsyncSession path is not implemented yet. Use a sync Session with to_thread, "
+        "or migrate builders to Core select() statements for full async."
+    )
+```
+
+### 📊 **Robust Count Query Implementation**
+
+- **Problem Solved**: Original count queries could fail with complex joins and filters
+- **v2 Solution**: Uses subquery approach for reliable counting
+- **Benefit**: Accurate pagination metadata even with complex queries
+
+```python
+def _execute_count_query_sync(self) -> int:
+    # Robust count: wrap filtered query as subquery and count rows
+    base_subq = self.query.order_by(None).subquery()
+    stmt = select(func.count()).select_from(base_subq)
+    return int(self.session.execute(stmt).scalar() or 0)
+```
+
+### 🛡️ **Enhanced Error Handling & Type Safety**
+
+- **Problem Solved**: Generic error messages and potential type issues
+- **v2 Solution**: Comprehensive logging with `logger.exception()` and strict type hints
+- **Benefit**: Better debugging and development experience
+
+```python
+try:
+    return await qb.execute()
+except Exception as error:
+    logger.exception("QueryBuilder Error: %s", str(error))
+    raise QueryBuilderError("Failed to execute query", error)
+```
+
+### 🏗️ **Improved Architecture & Code Organization**
+
+- **Problem Solved**: Monolithic methods and unclear separation of concerns
+- **v2 Solution**: Better method organization with clear section comments and helper functions
+- **Benefit**: More maintainable and readable codebase
+
+### 🔄 **Smart Query Building**
+
+- **Problem Solved**: Redundant query building for AsyncSession (which doesn't support `.query()`)
+- **v2 Solution**: Conditional query building based on session type
+- **Benefit**: Prevents unnecessary operations and memory usage
+
+```python
+# Initialize query components (sync ORM Query only)
+self.query: Optional[Query] = None
+if not self.is_async_session:
+    self.query = session.query(model)  # Flask-SQLAlchemy style
+```
+
+### 📝 **Enhanced Documentation & Examples**
+
+- **Problem Solved**: Limited guidance on proper usage patterns
+- **v2 Solution**: Comprehensive docstrings with usage examples and implementation notes
+- **Benefit**: Faster developer onboarding and reduced integration errors
+
+### 🎯 **Repository Pattern Integration**
+
+- **v2 Addition**: Complete repository pattern example showing real-world usage
+- **Benefit**: Production-ready implementation template for developers
+
+```python
+class ProductsRepository(BaseRepository):
+    async def get_products(self, query_params: Optional[Dict[str, Any]] = None):
+        """Get products using QueryBuilder utility - async-safe wrapper."""
+        # Complete implementation with proper error handling
+        qb = QueryBuilder(session=db.session, model=PublicProductsViewModel, ...)
+        return await qb.execute()
+```
+
+---
+
+## � Version Comparison: v1 vs v2
+
+| Feature                | v1 (Original)                                     | v2 (AI Enhanced)                                           |
+| ---------------------- | ------------------------------------------------- | ---------------------------------------------------------- |
+| **Async Execution**    | `ThreadPoolExecutor` with manual context handling | `asyncio.to_thread()` with improved context management     |
+| **Session Handling**   | Basic session type detection                      | Smart conditional query building with clear error messages |
+| **Count Queries**      | Simple `func.count()` approach                    | Robust subquery-based counting for complex queries         |
+| **Error Handling**     | Basic exception catching                          | Comprehensive logging with `logger.exception()`            |
+| **Type Safety**        | Minimal type hints                                | Full type annotations with `Optional[Query]`               |
+| **Code Organization**  | Monolithic structure                              | Organized sections with helper methods                     |
+| **Documentation**      | Basic docstrings                                  | Comprehensive usage examples and implementation notes      |
+| **Repository Pattern** | No example provided                               | Complete repository integration example                    |
+| **Performance**        | Potential threading overhead                      | Optimized async execution with better resource management  |
+| **Debugging**          | Generic error messages                            | Detailed error context and stack traces                    |
+
+### 🎯 **Migration from v1 to v2**
+
+Migrating is seamless - the public API remains unchanged:
+
+```python
+# Same interface works for both versions
+qb = QueryBuilder(
+    session=db.session,
+    model=ProductModel,
+    query_params=request.args,
+    config=config
+)
+result = await qb.execute()  # Same call, better performance in v2
+```
+
+**v2 Benefits Without Code Changes:**
+
+- ✅ Automatic performance improvements
+- ✅ Better error messages for debugging
+- ✅ More reliable count queries
+- ✅ Enhanced async handling
+- ✅ Future-proof architecture
+
+---
+
+## �🔎 Filtering and Operators
 
 You can filter using common SQL operators:
 
@@ -459,3 +600,5 @@ class PaginationMeta:
 ```
 
 This ensures consistent API responses across all endpoints using the QueryBuilder.
+
+## AI Enhancements

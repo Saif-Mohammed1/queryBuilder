@@ -426,8 +426,8 @@ class QueryBuilder:
                             return self._execute_data_query_sync()
                         else:
                             return self._execute_count_query_sync()
-                
-                loop = asyncio.get_event_loop()
+
+                loop = asyncio.get_running_loop()
                 with ThreadPoolExecutor() as executor:
                     # Execute data query and count query concurrently
                     data_future = loop.run_in_executor(
@@ -445,7 +445,7 @@ class QueryBuilder:
                 # For true AsyncSession (if ever implemented)
                 # data = await self._execute_data_query_async()
                 # total = await self._execute_count_query_async()
-              data, total    = asyncio.gather(
+              data, total    =await asyncio.gather(
                     self._execute_data_query_async(),
                     self._execute_count_query_async()
                 )
