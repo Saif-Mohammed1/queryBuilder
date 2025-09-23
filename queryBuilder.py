@@ -445,7 +445,7 @@ class QueryBuilder:
                 # For true AsyncSession (if ever implemented)
                 # data = await self._execute_data_query_async()
                 # total = await self._execute_count_query_async()
-              data, total    =await asyncio.gather(
+              data, total = await asyncio.gather(
                     self._execute_data_query_async(),
                     self._execute_count_query_async()
                 )
