@@ -1,101 +1,150 @@
-````markdown
-# Mongoose Query Builder Utility
+# Python SQLAlchemy Query Builder Utility
 
-A powerful, configurable query builder for Mongoose that simplifies complex MongoDB queries with support for pagination, filtering, sorting, text search, projection, and population — all through clean and reusable code.
+A powerful, configurable query builder for SQLAlchemy that simplifies complex database queries with support for pagination, filtering, sorting, text search, joins, and aggregation — all through clean and reusable code.
 
 ## ✨ Key Features
 
 - ✅ Automatic pagination with meta info and HATEOAS-style links
-- ✅ Flexible filtering with MongoDB operator support (`gt`, `lt`, `in`, etc.)
+- ✅ Flexible filtering with SQL operator support (`gt`, `lt`, `in`, `like`, etc.)
 - ✅ Dynamic sorting with field whitelisting
-- ✅ Text search (`$text` or regex fallback)
-- ✅ Population support for relational fields
+- ✅ Full-text search with PostgreSQL support
+- ✅ Join support for relational data
 - ✅ Field projection and exclusion
 - ✅ Field/param aliasing and filter mapping
 - ✅ Fixed filters for multi-tenant or role-based data access
 - ✅ Secure and sanitized input handling
+- ✅ Both sync and async session support
 
 ---
 
 ## 💡 DRY Benefits
 
-This utility removes repetitive Mongoose logic by:
+This utility removes repetitive SQLAlchemy logic by:
 
 1. Centralizing pagination, filtering, and sorting logic
 2. Supporting flexible query params without boilerplate
 3. Enforcing field whitelisting and validation
 4. Standardizing API responses across endpoints
-5. Simplifying `populate()` and projection
-6. Handling edge cases like date parsing and operator merging
+5. Simplifying joins and aggregations
+6. Handling edge cases like date formatting and operator parsing
 
 ---
 
 ## 🚀 Installation
 
 ```bash
-# No separate package needed
-# Just include the QueryBuilder.ts class and types in your project
+pip install sqlalchemy
+# Include the QueryBuilder class and types in your project
 ```
-````
 
 ---
 
 ## 🛠️ Usage
 
-### 🧱 Setup
+### 🧱 Basic Setup and Usage
 
-```ts
-import { QueryBuilder } from "./utils/queryBuilder";
-import type { QueryBuilderConfig } from "./types/queryBuilder.types";
+```python
+from queryBuilder import QueryBuilder
+from queryBuilder_types import QueryBuilderConfig
 
-const config: QueryBuilderConfig<Product> = {
-  allowedFilters: ["name", "price", "category"],
-  allowedSorts: ["createdAt", "price"],
-  defaultSort: "-createdAt",
-  searchFields: ["name", "description"],
-  maxLimit: 50,
-  filterMap: {
-    category: "categoryId",
-  },
-  paramAliases: {
-    q: "search",
-  },
-  enableTextSearch: true,
-};
+async def get_products(query_params=None):
+    """Get products using QueryBuilder utility - async version"""
+    if not query_params:
+        query_params = {}
 
-const queryParams = new URLSearchParams(req.query);
-const builder = new QueryBuilder(ProductModel, queryParams, config);
-const result = await builder.execute();
+    # Configure QueryBuilder
+    config = QueryBuilderConfig(
+        allowed_filters=[
+            'name', 'category', 'price', 'discount', 'user_id',
+            'description', 'stock', 'ratings_average', 'ratings_quantity',
+            'slug', 'created_at',
+        ],
+        allowed_sorts=[
+            'name', 'price',
+            'ratings_average', 'created_at',
+        ],
+        default_sort='-created_at',
+        max_limit=50,
+        search_fields=['name', 'description'],
+        enable_full_text_search=True,
+        filter_map={
+            'rating': 'ratings_average',
+            'popularity': 'sold',
+            'available': 'stock'
+        },
+        param_aliases={
+            'q': 'search',
+            'category_name': 'category',
+            'min_price': 'price[gte]',
+            'max_price': 'price[lte]',
+            'min_rating': 'ratings_average[gte]'
+        },
+        date_format_fields={
+            'created_at': 'YYYY-MM-DD HH24:MI:SS',
+            'updated_at': 'YYYY-MM-DD HH24:MI:SS'
+        }
+    )
+
+    # Create QueryBuilder instance
+    query_builder = QueryBuilder(
+        session=db.session,
+        model=PublicProductsViewModel,
+        query_params=query_params,
+        config=config
+    )
+
+    # Execute and return results
+    return await query_builder.execute()
 ```
 
 ---
 
 ## 🔎 Filtering and Operators
 
-You can filter using common MongoDB operators:
+You can filter using common SQL operators:
 
 ```http
-GET /products?price[gte]=100&rating[lt]=4&category[in]=electronics,books
+GET /products?price[gte]=100&ratings_average[lt]=4&category[in]=electronics,books
 ```
 
 Supported operators:
 
-- `gt`, `gte`, `lt`, `lte`
+- `gt`, `gte`, `lt`, `lte` (greater than, less than comparisons)
 - `ne` (not equal)
-- `in`, `nin` (array inclusion)
-- `regex` (pattern matching)
+- `in`, `nin` (array inclusion/exclusion)
+- `li`, `ili` (LIKE and ILIKE for pattern matching)
+- `con` (PostgreSQL JSONB contains operator)
 
----
+### Example with joins:
 
-## 📦 Population
+```python
+async def get_products_with_images():
+    """Get products with their images using joins"""
+    config = QueryBuilderConfig(
+        allowed_filters=['name', 'category', 'price', 'active'],
+        allowed_sorts=['name', 'price', 'created_at'],
+        max_limit=50
+    )
 
-Populate referenced fields using:
+    query_builder = QueryBuilder(
+        session=db.session,
+        model=ProductModel,
+        query_params=request.args,
+        config=config
+    )
 
-```ts
-builder.populate([
-  { path: "user", select: "name email" },
-  { path: "category", select: "title" },
-]);
+    # Add join for product images
+    result = await query_builder.join(JoinConfig(
+        table='product_images',
+        alias='pi',
+        type=JoinType.LEFT,
+        on_left='_id',
+        on_right='product_id',
+        select=['_id', 'link', 'public_id'],
+        outer_key='images'
+    )).execute()
+
+    return result
 ```
 
 ---
@@ -110,23 +159,23 @@ GET /products?page=2&limit=15
 
 Returns:
 
-```json
+```python
 {
-  "docs": [...],
-  "meta": {
-    "total": 120,
-    "page": 2,
-    "limit": 15,
-    "totalPages": 8,
-    "hasNext": true,
-    "hasPrev": true
-  },
-  "links": {
-    "first": "?page=1&limit=15",
-    "prev": "?page=1&limit=15",
-    "next": "?page=3&limit=15",
-    "last": "?page=8&limit=15"
-  }
+    "docs": [...],  # List of product objects
+    "meta": {
+        "total": 120,
+        "page": 2,
+        "limit": 15,
+        "total_pages": 8,
+        "has_next": True,
+        "has_prev": True
+    },
+    "links": {
+        "first": "?page=1&limit=15",
+        "prev": "?page=1&limit=15",
+        "next": "?page=3&limit=15",
+        "last": "?page=8&limit=15"
+    }
 }
 ```
 
@@ -134,28 +183,32 @@ Returns:
 
 ## 🧰 Configuration Options
 
-| Option             | Type                      | Description                                    | Default      |
-| ------------------ | ------------------------- | ---------------------------------------------- | ------------ |
-| `allowedFilters`   | `(keyof T)[]`             | Whitelisted query fields for filtering         | \[]          |
-| `allowedSorts`     | `(keyof T)[]`             | Allowed fields for sorting                     | \[]          |
-| `defaultSort`      | `string`                  | Default sort (supports `-` for DESC)           | "-createdAt" |
-| `maxLimit`         | `number`                  | Max items per page                             | 15           |
-| `searchFields`     | `(keyof T)[]`             | Fields to search via `regex` or `$text`        | \[]          |
-| `enableTextSearch` | `boolean`                 | Use MongoDB `$text` instead of regex           | false        |
-| `paramAliases`     | `Record<string, string>`  | Aliases for query params (e.g. `q` → `search`) | {}           |
-| `filterMap`        | `Record<string, keyof T>` | Map query keys to DB field names               | {}           |
-| `fixedFilters`     | `FilterQuery<T>`          | Filters that are always applied                | {}           |
-| `excludeFields`    | `(keyof T)[]`             | Fields to exclude from response                | \[]          |
+| Option                    | Type             | Description                                    | Default       |
+| ------------------------- | ---------------- | ---------------------------------------------- | ------------- |
+| `allowed_filters`         | `List[str]`      | Whitelisted fields for filtering               | \[]           |
+| `allowed_sorts`           | `List[str]`      | Allowed fields for sorting                     | \[]           |
+| `default_sort`            | `str`            | Default sort (supports `-` for DESC)           | "-created_at" |
+| `max_limit`               | `int`            | Max items per page                             | 15            |
+| `search_fields`           | `List[str]`      | Fields to search via full-text or ILIKE        | \[]           |
+| `enable_full_text_search` | `bool`           | Use PostgreSQL full-text search                | False         |
+| `param_aliases`           | `Dict[str, str]` | Aliases for query params (e.g. `q` → `search`) | {}            |
+| `filter_map`              | `Dict[str, str]` | Map query keys to DB field names               | {}            |
+| `fixed_filters`           | `Dict[str, Any]` | Filters that are always applied                | {}            |
+| `exclude_fields`          | `List[str]`      | Fields to exclude from response                | \[]           |
+| `select_fields`           | `List[str]`      | Specific fields to select only                 | \[]           |
+| `date_format_fields`      | `Dict[str, str]` | PostgreSQL TO_CHAR formats for date fields     | {}            |
 
 ---
 
 ## 🔍 Text Search
 
-Enable text search and define fields:
+Enable full-text search and define fields:
 
-```ts
-enableTextSearch: true,
-searchFields: ["title", "description"]
+```python
+config = QueryBuilderConfig(
+    enable_full_text_search=True,
+    search_fields=['name', 'description']
+)
 ```
 
 Usage:
@@ -164,15 +217,39 @@ Usage:
 GET /products?search=wireless+headphones
 ```
 
-Fallbacks to `regex` if `$text` is not enabled.
+Falls back to `ILIKE` pattern matching if full-text search is disabled.
+
+---
+
+## 🔗 Joins and Relationships
+
+Handle related data with joins:
+
+```python
+from queryBuilder_types import JoinConfig, JoinType
+
+# Left join with product categories
+join_config = JoinConfig(
+    table='categories',
+    alias='cat',
+    type=JoinType.LEFT,
+    on_left='category_id',
+    on_right='_id',
+    select=['name', 'description'],
+    outer_key='category_info'
+)
+
+result = await query_builder.join(join_config).execute()
+```
 
 ---
 
 ## 🛡️ Security Tips
 
-- Use `allowedFilters`, `allowedSorts`, and `excludeFields` to avoid exposing sensitive data.
+- Use `allowed_filters`, `allowed_sorts`, and `exclude_fields` to avoid exposing sensitive data.
 - Map query param aliases to avoid leaking internal database structures.
-- Use `fixedFilters` for multitenancy or user-scoped data access.
+- Use `fixed_filters` for multitenancy or user-scoped data access.
+- All input is sanitized and validated before query execution.
 
 ---
 
@@ -180,66 +257,205 @@ Fallbacks to `regex` if `$text` is not enabled.
 
 All errors are wrapped in a `QueryBuilderError`:
 
-```ts
-try {
-  await builder.execute();
-} catch (error) {
-  if (error instanceof QueryBuilderError) {
-    console.error("Query error:", error.originalError);
-  }
-}
+```python
+from queryBuilder_types import QueryBuilderError
+
+try:
+    result = await query_builder.execute()
+except QueryBuilderError as error:
+    logger.error(f"Query error: {error.message}")
+    if error.original_error:
+        logger.error(f"Original error: {error.original_error}")
 ```
 
 ---
 
 ## 📌 Best Practices
 
-- ✅ Whitelist all filters and sorts explicitly
-- ✅ Limit `maxLimit` to protect performance
-- ✅ Use `populate()` for referencing related models
-- ✅ Use `fixedFilters` for authorization-based querying
+- ✅ Whitelist all filters and sorts explicitly for security
+- ✅ Limit `max_limit` to protect database performance
+- ✅ Use joins for related data instead of separate queries
+- ✅ Use `fixed_filters` for authorization-based querying
 - ✅ Alias external query params like `q`, `from`, `to`
-- ✅ Standardize query responses across your API
+- ✅ Standardize query responses across your API endpoints
+- ✅ Handle both sync and async database sessions appropriately
 
 ---
 
-## 🧪 Example Query
+## 🧪 Example Queries
+
+### Basic filtering:
 
 ```http
 GET /products?category[in]=electronics,books&price[gte]=50&search=charger&sort=-price&page=1&limit=10&fields=name,price
 ```
 
----
+### Complex filtering with multiple operators:
 
-## 📚 Result Format
+```http
+GET /products?price[gte]=100&price[lte]=500&ratings_average[gt]=4.0&stock[ne]=0&category=electronics
+```
 
-```ts
-interface QueryBuilderResult<T> {
-  docs: T[];
-  meta: {
-    total: number;
-    page: number;
-    limit: number;
-    totalPages: number;
-    hasNext: boolean;
-    hasPrev: boolean;
-  };
-  links?: {
-    first?: string;
-    prev?: string;
-    next?: string;
-    last?: string;
-  };
-}
+### Date range filtering:
+
+```http
+GET /products?created_at[gte]=2023-01-01&created_at[lt]=2024-01-01&sort=created_at
 ```
 
 ---
 
-## 🧩 Extending
+## 📚 Complete Example Implementation
+
+```python
+from flask import Flask, request, jsonify
+from queryBuilder import QueryBuilder
+from queryBuilder_types import QueryBuilderConfig, JoinConfig, JoinType
+from models import ProductModel, db
+
+app = Flask(__name__)
+
+@app.route('/api/products', methods=['GET'])
+async def get_products():
+    """Complete products endpoint with QueryBuilder"""
+
+    # Configure the query builder
+    config = QueryBuilderConfig(
+        allowed_filters=[
+            'name', 'category', 'price', 'discount', 'user_id',
+            'description', 'stock', 'ratings_average', 'ratings_quantity',
+            'slug', 'created_at', 'updated_at', 'active'
+        ],
+        allowed_sorts=[
+            'name', 'price', 'ratings_average', 'created_at', 'stock'
+        ],
+        default_sort='-created_at',
+        max_limit=100,
+        search_fields=['name', 'description'],
+        enable_full_text_search=True,
+        filter_map={
+            'rating': 'ratings_average',
+            'popularity': 'sold',
+            'available': 'stock'
+        },
+        param_aliases={
+            'q': 'search',
+            'category_name': 'category',
+            'min_price': 'price[gte]',
+            'max_price': 'price[lte]',
+            'min_rating': 'ratings_average[gte]'
+        },
+        fixed_filters={
+            'active': True  # Only show active products
+        },
+        date_format_fields={
+            'created_at': 'YYYY-MM-DD HH24:MI:SS',
+            'updated_at': 'YYYY-MM-DD HH24:MI:SS'
+        }
+    )
+
+    # Create QueryBuilder instance
+    query_builder = QueryBuilder(
+        session=db.session,
+        model=ProductModel,
+        query_params=request.args,
+        config=config
+    )
+
+    # Add optional joins based on query parameters
+    if 'include_images' in request.args:
+        query_builder.join(JoinConfig(
+            table='product_images',
+            alias='images',
+            type=JoinType.LEFT,
+            on_left='_id',
+            on_right='product_id',
+            select=['_id', 'link', 'alt_text'],
+            outer_key='images'
+        ))
+
+    if 'include_category' in request.args:
+        query_builder.join(JoinConfig(
+            table='categories',
+            alias='cat',
+            type=JoinType.LEFT,
+            on_left='category_id',
+            on_right='_id',
+            select=['name', 'description'],
+            outer_key='category_info'
+        ))
+
+    try:
+        # Execute query and return results
+        result = await query_builder.execute()
+        return jsonify(result.dict()), 200
+
+    except QueryBuilderError as e:
+        return jsonify({
+            'error': 'Query failed',
+            'message': e.message
+        }), 400
+    except Exception as e:
+        return jsonify({
+            'error': 'Internal server error'
+        }), 500
+
+if __name__ == '__main__':
+    app.run(debug=True)
+```
+
+---
+
+## 🧩 Extending the Query Builder
 
 You can easily extend this builder to:
 
-- Support custom operators
-- Add aggregations or group-by logic
-- Integrate caching or rate limiting
-- Include role-based access logic
+- Support custom SQL operators
+- Add complex aggregations with GROUP BY
+- Integrate caching mechanisms
+- Include role-based access control logic
+- Add query performance monitoring
+- Support database-specific features (PostgreSQL arrays, JSON operations, etc.)
+
+### Example Extension:
+
+```python
+class ExtendedQueryBuilder(QueryBuilder):
+    """Extended QueryBuilder with custom aggregations"""
+
+    def add_aggregation(self, group_fields: List[str], aggregate_queries: List[str]):
+        """Add aggregation support"""
+        return self.aggregate(aggregate_queries, group_fields)
+
+    def add_custom_filter(self, field: str, custom_logic: str):
+        """Add custom SQL filter logic"""
+        self.query = self.query.filter(text(custom_logic))
+        return self
+```
+
+---
+
+## 📊 Result Format
+
+The QueryBuilder returns results in this standardized format:
+
+```python
+from dataclasses import dataclass
+from typing import List, Dict, Optional, Any
+
+@dataclass
+class QueryBuilderResult:
+    docs: List[Any]  # Your model instances
+    meta: PaginationMeta
+    links: Optional[Dict[str, str]] = None
+
+@dataclass
+class PaginationMeta:
+    total: int
+    page: int
+    limit: int
+    total_pages: int
+    has_next: bool
+    has_prev: bool
+```
+
+This ensures consistent API responses across all endpoints using the QueryBuilder.
